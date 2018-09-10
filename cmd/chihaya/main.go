@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"runtime/pprof"
 	"runtime/trace"
 	"strings"
 	"syscall"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/pkg/profile"
 
 	"github.com/chihaya/chihaya/frontend/http"
 	"github.com/chihaya/chihaya/frontend/udp"
@@ -49,6 +49,7 @@ func (r *Run) Start(ps storage.PeerStore) error {
 		return errors.New("failed to read config: " + err.Error())
 	}
 	cfg := configFile.Chihaya
+
 
 	r.sg = stop.NewGroup()
 
@@ -141,6 +142,7 @@ func RootRunCmdFunc(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+
 	r, err := NewRun(configFilePath)
 	if err != nil {
 		return err
@@ -215,18 +217,6 @@ func RootPreRunCmdFunc(cmd *cobra.Command, args []string) error {
 		log.Info("enabled tracing", log.Fields{"path": tracePath})
 	}
 
-	cpuProfilePath, err := cmd.Flags().GetString("cpuprofile")
-	if err != nil {
-		return err
-	}
-	if cpuProfilePath != "" {
-		f, err := os.Create(cpuProfilePath)
-		if err != nil {
-			return err
-		}
-		pprof.StartCPUProfile(f)
-		log.Info("enabled CPU profiling", log.Fields{"path": cpuProfilePath})
-	}
 
 	return nil
 }
@@ -235,13 +225,14 @@ func RootPreRunCmdFunc(cmd *cobra.Command, args []string) error {
 // flags.
 func RootPostRunCmdFunc(cmd *cobra.Command, args []string) error {
 	// These can be called regardless because it noops when not profiling.
-	pprof.StopCPUProfile()
 	trace.Stop()
 
 	return nil
 }
 
 func main() {
+	defer profile.Start().Stop()
+
 	var rootCmd = &cobra.Command{
 		Use:                "chihaya",
 		Short:              "BitTorrent Tracker",
@@ -263,12 +254,14 @@ func main() {
 
 	rootCmd.Flags().String("config", "/etc/chihaya.yaml", "location of configuration file")
 
+
 	var e2eCmd = &cobra.Command{
 		Use:   "e2e",
 		Short: "exec e2e tests",
 		Long:  "Execute the Chihaya end-to-end test suite",
 		RunE:  EndToEndRunCmdFunc,
 	}
+
 
 	e2eCmd.Flags().String("httpaddr", "http://127.0.0.1:6969/announce", "address of the HTTP tracker")
 	e2eCmd.Flags().String("udpaddr", "udp://127.0.0.1:6969", "address of the UDP tracker")
